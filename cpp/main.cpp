@@ -5,7 +5,7 @@
 
 using namespace std;
 
-string&& addCookies(string&& payload) {
+string addCookies(string&& payload) {
   istringstream data(payload);
   string token, buffer;
 
@@ -15,7 +15,7 @@ string&& addCookies(string&& payload) {
       buffer += "Set-Cookie: yummy_cookie=choco\n";
   }
 
-  return move(buffer);
+  return buffer;
 }
 
 int main(){
@@ -30,7 +30,7 @@ int main(){
       Pipe pipe {{.from=fd_server, .to=fd_client }}; 
       pipe.addOutputController(addCookies);
       pipe.pipe();
-      });
+   });
 
   return 0;
 }

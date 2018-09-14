@@ -24,7 +24,7 @@ string Read(int file_descriptor) {
 }
 
 template <typename FD>
-void Write(FD& fd, string str) {  
+void Write(FD& fd, string&& str) {  
   auto rsize = str.size() * sizeof(char);
   write(fd, str.c_str(), rsize); 
 }
@@ -60,11 +60,11 @@ class Pipe {
       output = outDelegate; 
     }
 
-    string&& OutputControl(Options opt) {
+    string OutputControl(Options opt) {
       if( output == nullptr)
-        return Debug(Read(opt.to)); 
+        return Read(opt.to); 
 
-      return Debug(output(Read(opt.to)));
+      return output(Read(opt.to));
     }
 
     void pipe(){
