@@ -1,24 +1,36 @@
 #include <iostream>
-#include "server.h"
+#include "network.h"
+#include "pipe.h"
+#include <sstream>
+
 using namespace std;
 
-void handle(int file_descriptor){
-  string resp = "HTTP/1.0 200 OK \n\n Date: Mon, 11 July 2016 23:59:59 GMT\n Content-Type: text/html  \n\n <html> <head> <title> Hi!! </title>  </head> <body> <h1>Hello World</h1> </body>  </html> \n";
+string&& addCookies(string&& payload) {
+  istringstream data(payload);
+  string token, buffer;
 
-  cout << "data received ->" << Read(file_descriptor) << endl;
-  Write(file_descriptor, resp);
+  while(std::getline(data, token)) {
+    buffer += token + "\n";
+    if(token.find("Content-type:")!= string::npos)
+      buffer += "Set-Cookie: yummy_cookie=choco\n";
+  }
 
-  cout << "closing connection..." << endl;
-  close(file_descriptor);
+  return move(buffer);
 }
 
 int main(){
-  std::cout << "thread pool example" << std::endl;	
-  
+  cout << "thread pool example" << endl;	
+
   Server server{8080};
-  server.waitForConnections(handle);
+  Client client{"localhost", 8087}; 
+
+  server.waitForConnections([&client](auto fd_server){
+      auto fd_client = client.establishConnection();
+
+      Pipe pipe {{.from=fd_server, .to=fd_client }}; 
+      pipe.addOutputController(addCookies);
+      pipe.pipe();
+      });
 
   return 0;
 }
-
-
