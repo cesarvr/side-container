@@ -5,7 +5,7 @@
 
 using namespace std;
 
-string addCookies(string&& payload) {
+string addCookies(string payload) {
   istringstream data(payload);
   string token, buffer;
 
@@ -26,10 +26,12 @@ int main(){
 
   server.waitForConnections([&client](auto fd_server){
       auto fd_client = client.establishConnection();
+  
+      Write(fd_client, Read(fd_server)); 
+      Write(fd_server, addCookies(Read(fd_client))); 
 
-      Pipe pipe {{.from=fd_server, .to=fd_client }}; 
-      pipe.addOutputController(addCookies);
-      pipe.pipe();
+      close(fd_client);
+      close(fd_server);
    });
 
   return 0;
