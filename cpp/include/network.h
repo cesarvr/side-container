@@ -12,8 +12,7 @@
 
 using namespace std;
 
-
-void checkForErrors( int code, string &&mess){
+void checkForErrors( int code, string mess){
   if(code == -1)
   {
     //print the error message
@@ -21,27 +20,6 @@ void checkForErrors( int code, string &&mess){
     exit (EXIT_FAILURE);
   }
 }
-
-
-
-class Workers {
-  private:
-    std::vector<std::thread> pool; 
-
-  public:
-    Workers(){};
-
-    void add(std::thread&& th){
-      pool.push_back(std::move(th));
-    } 
-
-    ~Workers() {
-      for(auto &worker : pool){
-        cout << "cleaning.." << endl;
-        worker.join();
-      }
-    }
-};
 
 class Client {
   private:
@@ -76,11 +54,11 @@ class Client {
 class Server {
   private:
     int socket_descriptor, port;
-    struct sockaddr_in server , client;
-
+    struct sockaddr_in configuration;
+    
   public:
     Server(int port): port{port}{
-      //Create socket
+      
       socket_descriptor = socket(AF_INET , SOCK_STREAM , 0);
 
       checkForErrors(socket_descriptor, "Can't create a socket");
@@ -88,23 +66,20 @@ class Server {
       puts("Socket created");
 
       //Prepare the sockaddr_in structure
-      server.sin_family = AF_INET;
-      server.sin_addr.s_addr = INADDR_ANY;
-      server.sin_port = htons( port );
+      configuration.sin_family = AF_INET;
+      configuration.sin_addr.s_addr = INADDR_ANY;
+      configuration.sin_port = htons( port );
     }
 
     template <typename Callback>
       void waitForConnections(Callback&& cb) {
-        //Bind
-        auto status = bind(socket_descriptor, (struct sockaddr *)&server , sizeof(server));
+
+        auto status = bind(socket_descriptor, (struct sockaddr *)&configuration , sizeof(configuration));
         cout << "listening in port " << port << endl; 
 
-        //Listen
         listen(socket_descriptor , 3);
 
-        int len = sizeof(struct sockaddr_in);  
-        Workers workers;
-
+        auto len = sizeof(struct sockaddr_in);  
         while(true)
         { 
           struct sockaddr address;
@@ -112,8 +87,9 @@ class Server {
           // blocking here. 
           auto socket  = accept(socket_descriptor, 
               (struct sockaddr *)&address, (socklen_t *) &len );
+
           cout << "connection accepted" << endl;
-          //std::thread worker{ cb, socket };	
+
           cb(socket);
         }
       }

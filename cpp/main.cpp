@@ -1,21 +1,25 @@
 #include <iostream>
+#include <sstream>
+
 #include "network.h"
 #include "pipe.h"
-#include <sstream>
+#include "http.h"
 
 using namespace std;
 
-string addCookies(string payload) {
-  istringstream data(payload);
-  string token, buffer;
+int randomNumber() {
+  srand (time(NULL));
+  return rand() % 1000 + 1; 
+}
 
-  while(std::getline(data, token)) {
-    buffer += token + "\n";
-    if(token.find("Content-type:")!= string::npos)
-      buffer += "Set-Cookie: yummy_cookie=choco\n";
-  }
+string addCookies(string&& payload) {
+  HTTPMessage httpMessage{payload};
 
-  return buffer;
+  httpMessage.getHeaders().add("Set-Cookie", "visitor=232");
+ 
+  cout << "response:" << httpMessage.toString() << endl; 
+
+  return httpMessage.toString();
 }
 
 int main(){
@@ -24,15 +28,11 @@ int main(){
   Server server{8080};
   Client client{"localhost", 8087}; 
 
-  server.waitForConnections([&client](auto fd_server){
-      auto fd_client = client.establishConnection();
-  
-      Write(fd_client, Read(fd_server)); 
-      Write(fd_server, addCookies(Read(fd_client))); 
+  server.waitForConnections([&client](int fd_server){
+    auto fd_client = client.establishConnection();
 
-      close(fd_client);
-      close(fd_server);
-   });
+    Channel ch{fd_server, fd_client}; 
+  });
 
   return 0;
 }
