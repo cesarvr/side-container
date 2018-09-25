@@ -8,12 +8,15 @@
 
 using namespace std;
 
-int randomNumber() {
-  srand (time(NULL));
-  return rand() % 1000 + 1; 
+function<void(void)> timming() {
+  auto _start = clock();
+  cout << "start" << endl;
+  
+  return [_start]() {
+    auto final_time = (clock() - _start) / (double)(CLOCKS_PER_SEC / 1000);
+    cout << "Elapse time: " << final_time  << " ms" << endl; 
+  };
 }
-
-
 
 int main(){
   cout << "thread pool example" << endl;	
@@ -28,21 +31,16 @@ int main(){
       cout << "fd_client: " << fd_client << endl; 
 
 
-      
-      clock_t start;
-      auto timmingStart = [&start](char *data){
-        start = clock(); 
-      };
+      Tunnel tunnel;
 
-      auto elapsedTime = [&start](char *data){
-        cout << "Time: " << (clock() - start) / (double)(CLOCKS_PER_SEC / 1000) << " ms" << endl; 
-      };
+      auto tmm = timming();
+      tunnel.from(fd_server)
+            .to(fd_client)
+            .probe(tmm)
+            .join();
 
-      thread receive  { TunnelMonitorClosingSessionStart<decltype(timmingStart)> ,fd_server, fd_client, timmingStart };  
-      thread response { TunnelMonitorClosingSessionEnd<decltype(elapsedTime)>,fd_client, fd_server, elapsedTime };  
 
-      receive.detach();
-      response.detach();
+
 
       });
 
