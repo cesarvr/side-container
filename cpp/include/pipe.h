@@ -12,28 +12,44 @@
 using namespace std; 
 const unsigned int MAX_BUF_LENGTH = 1024;
 
+struct IO {
+
+  template <typename WriteTo>
+  static void Read(int fd, WriteTo& write_to){
+    auto size=0;
+    char buffer[MAX_BUF_LENGTH]; 
+
+    while( (size = read(fd, buffer, MAX_BUF_LENGTH ) ) > 0) 
+      write_to(buffer, size);
+  }
+
+  template <typename Data>
+  static void Write(int fd, Data& data, int size) {
+    write(fd, data, size); 
+  } 
+};
+
 class Channel {
   private:
     int fd; 
     char buffer[MAX_BUF_LENGTH]; 
 
-
   public:
     Channel(int _fd): fd{_fd} {} 
 
     template <class Writer>
-    void bufferContentTo(Writer& destination){
-      auto size=0;
+      void bufferContentTo(Writer& destination){
+        auto size=0;
 
-      while( (size = read(fd, buffer, MAX_BUF_LENGTH ) ) > 0) {
-        destination.Write(buffer, size);
+        while( (size = read(fd, buffer, MAX_BUF_LENGTH ) ) > 0) {
+          destination.Write(buffer, size);
+        }
       }
-    }
-   
+
     template <typename Buffer>
-    void Write(Buffer&& data, int size) {
-      write(fd, data, size); 
-    }
+      void Write(Buffer&& data, int size) {
+        write(fd, data, size); 
+      }
 
     char* data(){
       return buffer;
@@ -46,15 +62,23 @@ class Channel {
 
 
 void aa() {  }
- 
+
+void SimpleTransfer(int from, int to) {
+  Channel in{from}, out{to}; 
+  in.bufferContentTo<Channel>(out);
+};
+
 class Tunnel {
   private: 
     int _from, _to;
-    function<void(void)> fn = aa; 
-    function<void(void)> on_start = aa; 
-    function<void(void)> on_end   = aa; 
-    
+    using Strategy = function<void(int from, int to)>;
+    Strategy incoming = SimpleTransfer ; 
+    Strategy outcoming = SimpleTransfer ; 
+
   public: 
+    Tunnel(){
+
+    }
 
     Tunnel& from(int _f) {
       _from = _f;
@@ -67,23 +91,21 @@ class Tunnel {
     }
 
     void join(){
-
-      auto traffic = [](int from, int to, function<void(void)> fn) {
-        Channel in{from}, out{to}; 
-        in.bufferContentTo<Channel>(out);
-
-        fn();
-      };
-
-      thread t1 {traffic, _from, _to, fn };
-      thread t2 {traffic, _to, _from , fn};
+      thread t1 {incoming, _from, _to };
+      thread t2 {outcoming, _to, _from };
 
       t1.detach();
       t2.detach();
     }
 
-      Tunnel& probe(function<void(void)> intercept){
-        fn = intercept;
-        return *this;
-      }
+    Tunnel& setIncomingTransferStrategy(Strategy strategy){
+      incoming = strategy;
+      return *this;
+    }
+    
+    Tunnel& setOutcomingTransferStrategy(Strategy strategy){
+      outcoming = strategy;
+      return *this;
+    }
+
 }; 
