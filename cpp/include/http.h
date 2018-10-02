@@ -1,124 +1,210 @@
 #include <iostream>
+#include <math.h>
 #include <string>
 #include <sstream>
 #include <vector>
+#include <map>
 
 using namespace std;
+const string COOKIE = "Set-Cookie"; 
+const string CONTENT_TYPE = "Content-type";
 
-class HTTPHeader {
-private:
-    vector<pair<string, string>> headers;
-    bool loaded = false;
-public:
-    
-    void parseLine(string token) {
-        if(!isHeader(token))
-            throw "Invalid header line: " + token;
-            
-        auto colon = token.find(":");
 
-        auto key = token.substr(0, colon);
-        auto value = token.substr(colon+1, token.length());
-        add(key, value);
+class HTTPHeaders {
+  private:
+    using Value = pair<string, string>;
+    map<string, string> headers;
+    vector<Value> ordered_list;
+    vector<Value> cookies;
+    int offset = 0;
+
+    void setup_cookies(ostringstream& output){
+      for(auto cookie : cookies)
+        output << cookie.first << ": " << cookie.second << "\n";    
     }
-    
-    bool isLoaded() {
-        return loaded;
+
+  public:
+
+    HTTPHeaders(){}
+    HTTPHeaders(vector<Value> _list): ordered_list {_list}{
+      for(Value& value: ordered_list)
+        headers[value.first] = value.second;
     }
-    
-    static bool isHeader(string token){
-        auto colon = token.find(":");
-        
-        if(colon != string::npos) {
-            return true;
+
+    void addCookie(string value){
+      cookies.push_back(make_pair(COOKIE, value));
+    }
+
+    void edit(string key, string _value){
+      auto value = headers[key];
+      headers[key] = _value;
+    }
+
+    string getContentType() {
+      return headers[CONTENT_TYPE];
+    }
+
+    vector<Value>& ordered(){
+      return ordered_list;
+    }
+
+    static bool isHeader(string property) {
+      return ( property.find(":") != string::npos );
+    }
+
+    static Value getValue(string data){
+      Value header;
+      auto sc_position = data.find(":");
+      auto key   = data.substr(0,sc_position);
+      auto value = data.substr(sc_position+2, data.length());
+      header = make_pair(string(key), string(value));
+
+      return header;
+    }
+
+    static HTTPHeaders parse(string headers_block){
+      istringstream tokens {headers_block};
+      string token;
+      vector<Value> ordered_list;
+
+      while(getline(tokens, token))
+        if(isHeader(token)) {
+          auto value = getValue(token);
+          ordered_list.push_back(value);
         }
-        return false;
+
+      return HTTPHeaders{ordered_list};
     }
-    
-    void add(string key, string value) {
-        loaded = true;
-        headers.push_back(make_pair(key, value));
+
+    string stringify() {
+      ostringstream output;
+      output << "Server"  << ": " << headers["Server"]  << "\n";
+      output << "Date"    << ": " << headers["Date"]  << "\n";
+      output << "Content-type"    << ": " << headers["Content-type"]  << "\n";
+      setup_cookies(output);
+
+      output << "Content-Length"  << ": " << headers["Content-Length"]  << "\n";
+      auto _output = output.str();
+      return _output;
     }
-    
-    string toString() {
-        string block;
-        for(auto header: headers)
-            block += header.first + ": " + header.second + " \n";
-        
-        block += "\n";
-        return block;
-    }
+};
+
+struct Status {
+  string version;
+  string code;
+  string description;
+
+  string toString(){
+    return version +" "+ code + " " + description + "\r\n";
+  }
 };
 
 struct HTTPStatus {
-    string version;
-    string code;
-    string description;
+  string html;
 
-    HTTPStatus(string _version, string _code, string _description):
-    version{_version},
-    code{_code},
-    description{_description} { }
-    
-    HTTPStatus(){}
-    
-    string toString() {
-        return version +" "+code+" "+description + "\n";
+  static Status getStatusHeader(string _htmlData) {
+    istringstream html(_htmlData);
+    Status status;
+    html >> status.version;
+    html >> status.code;
+    html >> status.description;
+
+    return status;
+  }
+
+  static string extractFirstOccurrence(string data, string query) {
+    auto pos = data.find(query);
+    if(pos != string::npos) {
+      return data.substr(0, pos);
     }
+    return "";
+  }
+
+  static bool isValidStatusHeader(string _htmlData) {
+    istringstream html(_htmlData);
+    string token;
+    html >> token;
+    if(token.find("HTTP/") != string::npos)
+      return true;
+    return false;
+  }
+
+  static bool isHTTPStatusHeader(string html) {
+    auto header = extractFirstOccurrence(html, "\n");
+    if(header!="")
+      return isValidStatusHeader(header);
+    return false;
+  }
+
+  static string stringify(Status& status) {
+    return status.version + " "+ status.code + " " + status.description + "\r\n";
+  }
+
 };
 
-class HTTPMessage{
-private:
-    istringstream payload;
-    HTTPHeader headers;
-    HTTPStatus status;
+
+class HTTP{
+  private:
+    HTTPHeaders headers;
+    Status status;
     string content;
-   
-public:
-    HTTPMessage(string message): payload{message} {
-        string line;
-        auto headersSection = true;
-        auto contentSection = false;
-        
-        parseHTTPStatus(payload);
- 
-        while(getline(payload, line)) {
-            if(line == "\r" && headers.isLoaded()) {
-                headersSection = false;
-                contentSection = true;
-            }
-            
-            if(headersSection) {
-                if(HTTPHeader::isHeader(line))
-                    headers.parseLine(line);
-            }
-            
-            if(contentSection)
-                content+=line+"\n";
-        }
+    bool isNewMessage; 
+    int raw_size;
+    ostringstream output;
+  public:
+
+    HTTP(string message) {
+      raw_size = message.size(); 
+      isNewMessage = HTTPStatus::isHTTPStatusHeader(message);
+
+      if(isNewMessage) {
+        status = HTTPStatus::getStatusHeader(message);
+        auto http_separation = message.find("\n\r");
+        cout << endl;
+
+        if( http_separation != string::npos ) {
+          auto raw_header = message.substr(0, http_separation); 
+          headers = HTTPHeaders::parse(raw_header);
+
+          content = message.substr(http_separation+1, message.length()); 
+        }else
+          cout << "didn't found any headers!" << endl;
+      }
+      else{
+        content = message; 
+      }
     }
-    
-    void parseHTTPStatus(istringstream& payload) {
-        string version, code, description, eol;
-        payload >> version;
-        payload >> code;
-        payload >> description;
-        
-        HTTPStatus _status {version, code, description};
-        status = _status;
+
+    bool isRawData(){
+      return !isNewMessage;
     }
-    
-    HTTPHeader& getHeaders(){
-        return headers;
+
+    int calculateOffset(int size){
+      if(isNewMessage){
+        auto _out = output.str(); 
+        double offset = (_out.size() * (size+1)) / raw_size; 
+        cout << "offset: " << offset << endl;
+        cout << "raw_size: " << raw_size << endl;
+        return ceil(offset);
+      }else{
+        return size;
+      }
     }
-    
+
+    HTTPHeaders& getHeaders(){
+      return headers;
+    }
+
     string toString() {
-        string output;
-        output += status.toString();
-        output += headers.toString();
-        output += "\r"; //setting up content.
-        output += content;
-        return output;
+      if(isNewMessage) {
+        output << HTTPStatus::stringify(status);
+        output << headers.stringify();
+        output << content;
+        return output.str();
+      }else{ 
+        output << content;
+        return output.str();
+      }
     }
 };
 

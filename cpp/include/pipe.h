@@ -12,50 +12,32 @@
 using namespace std; 
 const unsigned int MAX_BUF_LENGTH = 1024;
 
-struct IO {
-
-  template <typename WriteTo>
-  static void Read(int fd, WriteTo& write_to){
-    auto size=0;
-    char buffer[MAX_BUF_LENGTH]; 
-
-    while( (size = read(fd, buffer, MAX_BUF_LENGTH ) ) > 0) 
-      write_to(buffer, size);
-  }
-
-  template <typename Data>
-  static void Write(int fd, Data& data, int size) {
-    write(fd, data, size); 
-  } 
-};
-
-class Channel {
+class FileDescriptor {
   private:
     int fd; 
-    char buffer[MAX_BUF_LENGTH]; 
-
   public:
-    Channel(int _fd): fd{_fd} {} 
+    FileDescriptor(int _fd): fd{_fd} {} 
 
     template <class Writer>
       void bufferContentTo(Writer& destination){
         auto size=0;
+        char buffer[MAX_BUF_LENGTH];
 
         while( (size = read(fd, buffer, MAX_BUF_LENGTH ) ) > 0) {
+//          printf("read: [ fd: %d  size: %d] \n", fd, size);
           destination.Write(buffer, size);
         }
       }
 
     template <typename Buffer>
-      void Write(Buffer&& data, int size) {
-        write(fd, data, size); 
+      void Write(Buffer&& buffer, int size) {
+ //       printf("write: [ fd: %d  size: %d] \n", fd, size);
+        auto bytes = write(fd, buffer, size); 
       }
 
-    char* data(){
-      return buffer;
-    }
 
-    ~Channel(){
+    ~FileDescriptor(){
+  //    cout << "closing connection: " << fd << endl;
       close(fd);
     }
 };  
@@ -64,8 +46,8 @@ class Channel {
 void aa() {  }
 
 void SimpleTransfer(int from, int to) {
-  Channel in{from}, out{to}; 
-  in.bufferContentTo<Channel>(out);
+  FileDescriptor in{from}, out{to}; 
+  in.bufferContentTo<FileDescriptor>(out);
 };
 
 class Tunnel {
@@ -98,12 +80,12 @@ class Tunnel {
       t2.detach();
     }
 
-    Tunnel& setIncomingTransferStrategy(Strategy strategy){
+    Tunnel& requestDelegate(Strategy strategy){
       incoming = strategy;
       return *this;
     }
     
-    Tunnel& setOutcomingTransferStrategy(Strategy strategy){
+    Tunnel& responseDelegate(Strategy strategy){
       outcoming = strategy;
       return *this;
     }

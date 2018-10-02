@@ -75,7 +75,8 @@ class Server {
       void waitForConnections(Callback&& cb) {
 
         auto status = bind(socket_descriptor, (struct sockaddr *)&configuration , sizeof(configuration));
-        cout << "listening in port " << port << endl; 
+        checkForErrors(status, "Error binding the socket");
+        cout << "server listening in port: " << port << endl; 
 
         listen(socket_descriptor , 3);
 
